@@ -106,7 +106,7 @@ export default function Explorer() {
   // are visually countable.
   useEffect(() => {
     if (!search.data) return
-    setRows(search.data.logs)
+    setRows(search.data.logs ?? [])
     setNextOffset(search.data.next_offset ?? null)
     if (live) setLiveCount((n) => n + 1)
     setError(null)

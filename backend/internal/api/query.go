@@ -93,6 +93,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		s.writeStorageError(w, err)
 		return
 	}
+	if logs == nil {
+		logs = []map[string]string{}
+	}
 	resp := map[string]any{"logs": logs}
 	if len(logs) == limit {
 		resp["next_offset"] = offset + len(logs)
@@ -193,6 +196,9 @@ func (s *Server) handleFields(w http.ResponseWriter, r *http.Request) {
 		s.writeStorageError(w, err)
 		return
 	}
+	if fields == nil {
+		fields = []storage.ValueCount{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"fields": fields})
 }
 
@@ -217,6 +223,9 @@ func (s *Server) handleFieldValues(w http.ResponseWriter, r *http.Request) {
 		}
 		s.writeStorageError(w, err)
 		return
+	}
+	if values == nil {
+		values = []storage.ValueCount{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"field": field, "values": values})
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -134,6 +135,34 @@ func TestSearch(t *testing.T) {
 	}
 	if fr.gotSearch.Limit != 100 || fr.gotSearch.Offset != 0 {
 		t.Errorf("search params = %+v", fr.gotSearch)
+	}
+}
+
+func TestSearchEmptyReturnsEmptyArray(t *testing.T) {
+	// A nil slice from storage must serialize as [], not null: the UI
+	// dereferences logs.length unconditionally.
+	fr := &fakeReader{}
+	s, token := newQueryServer(t, fr)
+
+	rec := doJSON(t, s, "GET",
+		"/api/v1/logs/search?start=2026-09-14T11:00:00Z&end=2026-09-14T12:00:00Z", token, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("search: %d %s", rec.Code, rec.Body.String())
+	}
+	if !json.Valid(rec.Body.Bytes()) || !strings.Contains(rec.Body.String(), `"logs":[]`) {
+		t.Errorf("empty search body = %s, want logs:[]", rec.Body.String())
+	}
+
+	rec = doJSON(t, s, "GET",
+		"/api/v1/fields?start=2026-09-14T11:00:00Z&end=2026-09-14T12:00:00Z", token, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"fields":[]`) {
+		t.Errorf("empty fields body = %s, want fields:[]", rec.Body.String())
+	}
+
+	rec = doJSON(t, s, "GET",
+		"/api/v1/fields/hostname/values?start=2026-09-14T11:00:00Z&end=2026-09-14T12:00:00Z", token, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"values":[]`) {
+		t.Errorf("empty values body = %s, want values:[]", rec.Body.String())
 	}
 }
 
