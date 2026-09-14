@@ -1,0 +1,35 @@
+# secrets & local config
+*.env
+.env
+.env.*
+!.env.example
+
+# certificates & keys
+certs/
+*.crt
+*.key
+*.pem
+
+# runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# build artifacts
+backend/bin/
+frontend/dist/
+frontend/node_modules/
+
+# go
+backend/vendor/
+*.test
+*.out
+
+# editors / os
+.idea/
+.vscode/
+.DS_Store
+
+# local tool settings
+.qoder/settings.local.json
