@@ -9,15 +9,18 @@ GO    ?= go
 
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 
-.PHONY: help build build-tools run test lint security fmt tidy clean \
+.PHONY: help build build-tools web run test lint security fmt tidy clean \
 	docker-build compose-up compose-down compose-logs compose-smoke
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build the syslogq binary
+build: web ## Build the syslogq binary (with embedded web UI)
 	cd backend && $(GO) build -ldflags "-X main.version=$(VERSION)" -o bin/syslogq ./cmd/syslogq
+
+web: ## Build the SPA into backend/internal/web/dist (embedded by go:embed)
+	cd frontend && npm ci && npm run build
 
 build-tools: ## Build the loggen load generator
 	cd backend && $(GO) build -o bin/loggen ./cmd/loggen
@@ -48,7 +51,7 @@ clean: ## Remove build artifacts
 	rm -rf backend/bin
 
 docker-build: ## Build the syslogq container image
-	docker build -f deploy/docker/Dockerfile --build-arg VERSION=$(VERSION) -t syslogq:$(VERSION) backend/
+	docker build -f deploy/docker/Dockerfile --build-arg VERSION=$(VERSION) -t syslogq:$(VERSION) .
 
 compose-up: ## Start the dev stack (syslogq + VictoriaLogs)
 	docker compose up -d --build

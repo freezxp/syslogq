@@ -21,8 +21,8 @@ services:
 
   syslogq:
     build:
-      context: ./backend
-      dockerfile: ../deploy/docker/Dockerfile
+      context: .
+      dockerfile: deploy/docker/Dockerfile
     image: syslogq:dev
     environment:
       SYSLOGQ_STORAGE__URL: http://victorialogs:9428

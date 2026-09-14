@@ -53,13 +53,14 @@ Port map: 8080 HTTP API+UI · 514→5140/udp+tcp syslog · 6514 syslog TLS ·
 
 ## 3. Images & Build (as built)
 
-- `deploy/docker/Dockerfile` (context `backend/`): multi-stage —
-  `golang:1.25-alpine` build (`CGO_ENABLED=0`, `-trimpath`), then
+- `deploy/docker/Dockerfile` (context: repo root): three stages —
+  `node:24-alpine` builds the SPA (`npm ci && npm run build`), then
+  `golang:1.25-alpine` builds the Go binary (`CGO_ENABLED=0`, `-trimpath`)
+  with the SPA `go:embed`ded from the node stage output (ADR-0006), then
   distroless/static `nonroot` runtime (uid 65532), no shell, one
-  `/syslogq` binary.
-- `deploy/docker/Dockerfile.frontend` (Phase 4+) → built artifacts embedded
-  into the Go binary via `go:embed` (ADR-0006): one serving artifact, no
-  nginx layer.
+  `/syslogq` binary serving API + UI on 8080.
+- Local builds: `make web` (SPA → `backend/internal/web/dist`) then
+  `make build`; or `make docker-build` for the full container image.
 - Images tagged `vX.Y.Z` + git SHA; CI builds and pushes on tag; compose
   pins versions, never `latest` for VL.
 - Update policy: VL upgrades go through the migration-trigger checklist

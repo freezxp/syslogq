@@ -42,6 +42,8 @@ type Deps struct {
 	IngestRequireAuth bool
 	// Reader serves the query API (Phase 3); nil disables those routes.
 	Reader storage.Reader
+	// Web, when set, serves the embedded SPA at "/" (Phase 4).
+	Web http.Handler
 }
 
 type Server struct {
@@ -103,6 +105,11 @@ func (s *Server) routes() http.Handler {
 		mux.HandleFunc("GET /api/v1/logs/export", s.requireRole(auth.RoleOperator, s.handleExport))
 		mux.HandleFunc("GET /api/v1/fields", s.requireAuth(s.handleFields))
 		mux.HandleFunc("GET /api/v1/fields/{field}/values", s.requireAuth(s.handleFieldValues))
+	}
+
+	// Embedded SPA last: "/" only matches paths no other route claims.
+	if s.deps.Web != nil {
+		mux.Handle("/", s.deps.Web)
 	}
 
 	return mux

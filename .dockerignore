@@ -1,0 +1,17 @@
+# Build context is the repo root; keep the image build lean.
+.git/
+.github/
+.qoder/
+docs/
+deploy/kubernetes/
+backend/bin/
+backend/internal/web/dist/
+frontend/node_modules/
+frontend/dist/
+data/
+*.db
+*.db-wal
+*.db-shm
+certs/
+.env
+.env.*

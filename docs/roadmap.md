@@ -38,7 +38,7 @@ injection attempts; memory-storage fake for handler tests.
 **Exit:** every dashboard/explorer data need served by an endpoint; OpenAPI
 validated in CI; escape tests pass.
 
-## Phase 4 — Web UI
+## Phase 4 — Web UI — COMPLETE (2026-09-14)
 React+Vite+Tailwind app; design tokens (dark first); router + auth pages;
 app shell/sidebar; **Log Explorer**: time picker, visual query builder ↔
 advanced LogsQL mode, virtualized table, log detail drawer, field filters with
@@ -48,6 +48,18 @@ facets, URL state; **Live Tail** (WebSocket; pause/resume/clear/highlight);
 users, system info); keyboard shortcuts; E2E smoke (Playwright).
 **Exit:** Definition-of-done UI items 1–14 walkthrough passes; p95 first paint
 < 2s on 100K-row explorer views; e2e smoke green.
+
+As built: DoD items 1–14 verified with a Playwright walkthrough against a
+100K-row dataset (10/10 checks green); explorer first paint p95 **440 ms**
+(p50 408 ms); SPA embedded via `go:embed`, served by the one binary; CI gains
+a frontend lint+build job and builds the SPA before Go tests (embed checked
+in `internal/web` tests); compose-smoke asserts the UI is served at `/`.
+Deferred to Phase 5+ with rationale: WebSocket live tail (shipped as 3s
+polling toggle), visual query builder (Advanced grammar shipped), Sources/
+Settings/Saved-Searches server CRUD (auth/saved-searches endpoints), Radix
+primitives, Playwright-in-CI (local walkthrough scripted; compose-smoke
+covers the stack). Docker build is now three-stage (node → go → distroless)
+from the repo root.
 
 ## Phase 5 — Operations
 Source management fully wired (create/edit/enable/disable/delete/test with

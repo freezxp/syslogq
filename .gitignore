@@ -33,3 +33,7 @@ backend/vendor/
 
 # local tool settings
 .qoder/settings.local.json
+
+# embedded SPA build output (placeholder is committed so go:embed always matches)
+backend/internal/web/dist/*
+!backend/internal/web/dist/.placeholder

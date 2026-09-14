@@ -15,6 +15,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       compose: ${{ steps.filter.outputs.compose }}
       docs: ${{ steps.filter.outputs.docs }}
+      frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -27,22 +28,36 @@ jobs:
               - '.github/workflows/ci.yml'
             compose:
               - 'backend/**'
+              - 'frontend/**'
               - 'deploy/**'
               - 'docker-compose.yml'
               - 'config/**'
               - '.github/workflows/ci.yml'
             docs:
               - 'docs/**'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
 
   backend:
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: build embedded web UI
+        run: |
+          cd ../frontend
+          npm ci
+          npm run build
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
@@ -56,6 +71,25 @@ jobs:
         run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
       - name: unit tests
         run: go test -race -count=1 ./...
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: lint
+        run: npm run lint
+      - name: typecheck + build
+        run: npm run build
 
   security:
     needs: changes
@@ -105,6 +139,12 @@ jobs:
           echo "MARKER=$marker" >> "$GITHUB_ENV"
           logger -n 127.0.0.1 -P 514 --udp "$marker udp compose smoke"
           logger -n 127.0.0.1 -P 514 --tcp "$marker tcp compose smoke"
+      - name: Verify web UI is served
+        run: |
+          html=$(curl -fsS http://localhost:8080/)
+          echo "$html" | grep -q '<title>syslogq</title>' \
+            || { echo "SPA not served at /"; exit 1; }
+          echo "embedded UI served"
       - name: Verify messages stored (pipeline metrics)
         run: |
           for i in $(seq 1 30); do

@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-bg: #0b0d10;
+  --color-panel: #13161b;
+  --color-panel-2: #1a1f26;
+  --color-line: #262c35;
+  --color-text: #d7dce3;
+  --color-muted: #8b94a3;
+  --color-accent: #35b8f0;
+  --color-accent-dim: #1a7ba6;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2c333d;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* severity colors (RFC 5424) */
+.sev-emerg,
+.sev-alert,
+.sev-crit {
+  color: #f87171;
+}
+.sev-err {
+  color: #fb923c;
+}
+.sev-warning {
+  color: #fbbf24;
+}
+.sev-notice {
+  color: #67e8f9;
+}
+.sev-info {
+  color: #7dd3fc;
+}
+.sev-debug {
+  color: #9ca3af;
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/freezxp/syslogq/internal/ingestion"
 	"github.com/freezxp/syslogq/internal/metrics"
 	"github.com/freezxp/syslogq/internal/storage/victorialogs"
+	"github.com/freezxp/syslogq/internal/web"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -130,6 +131,7 @@ func run() int {
 		IngestFunc:        func(raw []byte) bool { return pipe.IngestRaw("http-ingest", raw, "") },
 		IngestRequireAuth: cfg.Ingestion.HTTP.RequireAuth,
 		Reader:            store,
+		Web:               web.Handler(),
 	})
 	httpErr := make(chan error, 1)
 	go func() { httpErr <- apiServer.Start() }()
