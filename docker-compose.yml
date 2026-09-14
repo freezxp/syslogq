@@ -31,9 +31,12 @@ services:
       - "8080:8080"   # API /health /ready /metrics
       - "514:5140/udp" # syslog UDP (host privileged port)
       - "514:5140/tcp" # syslog TCP
+    volumes:
+      - syslogq-data:/var/lib/syslogq # auth DB (users/sessions)
     depends_on:
       - victorialogs
     restart: unless-stopped
 
 volumes:
   vl-data:
+  syslogq-data:

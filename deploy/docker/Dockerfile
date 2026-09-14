@@ -21,10 +21,14 @@ COPY --from=web /web/dist /src/internal/web/dist
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
     -ldflags "-s -w -X main.version=${VERSION}" \
-    -o /out/syslogq ./cmd/syslogq
+    -o /out/syslogq ./cmd/syslogq \
+    && mkdir -p /out/data && touch /out/data/.keep
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/syslogq /syslogq
+# State dir (auth DB) owned by the nonroot runtime user (UID 65532) so the
+# server can create its database there without root.
+COPY --from=build --chown=65532:65532 /out/data /var/lib/syslogq
 # API + web UI (8080), syslog UDP/TCP (5140; map 514→5140 for privileged access)
 EXPOSE 8080 5140/udp 5140
 USER nonroot:nonroot

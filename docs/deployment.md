@@ -1,19 +1,20 @@
 # Deployment & Operations
 
-Date: 2026-09-14 · Status: Phase 1 as-built
+Date: 2026-09-14 · Status: Phase 4 as-built
 Target: one-command bring-up via Docker Compose in Phase 1; single-node
 VictoriaLogs; Kubernetes arrives in Phase 7 (directory prepared only).
 
-## 1. Compose Topology (Phase 1, as built)
+## 1. Compose Topology (Phase 4, as built)
 
 See `docker-compose.yml` at the repo root — the canonical file. Summary:
 
 ```yaml
 services:
-  syslogq:            # Go app: health/ready/metrics + syslog listeners
-    build: {context: ./backend, dockerfile: ../deploy/docker/Dockerfile}
+  syslogq:            # Go app: API + embedded web UI + syslog listeners
+    build: {context: ., dockerfile: deploy/docker/Dockerfile}
     environment: [SYSLOGQ_STORAGE__URL=http://victorialogs:9428]
     ports: ["8080:8080", "514:5140/udp", "514:5140/tcp"]
+    volumes: [syslogq-data:/var/lib/syslogq]     # auth DB (users/sessions)
     depends_on: [victorialogs]
     restart: unless-stopped
   victorialogs:
@@ -28,8 +29,10 @@ As-built notes: the server binds unprivileged **5140 in-container** (the
 image runs as a non-root user) and the compose file maps host 514 → 5140;
 config is defaults + `SYSLOGQ_*` env overrides rather than a mounted file in
 the dev stack. TLS source (6514) is defined in `config/syslogq.yaml` but
-disabled by default. When the SQLite-backed features land (Phase 2+), add
-the `syslogq-data` volume and `SYSLOGQ_CONFIG` mount.
+disabled by default. The image pre-creates `/var/lib/syslogq` owned by the
+runtime user (UID 65532) so the non-root server can create its SQLite auth
+DB; the `syslogq-data` volume persists it (seeded from the image with
+ownership preserved on first mount).
 
 VL is bound to localhost on the host: all external access flows through
 syslogq's API; CI runs the full smoke (logger → syslogq → VL query) via
