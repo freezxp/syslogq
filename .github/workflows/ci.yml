@@ -108,7 +108,9 @@ jobs:
       - name: Verify messages stored (pipeline metrics)
         run: |
           for i in $(seq 1 30); do
-            out=$(curl -fsS http://localhost:8080/metrics | grep '^syslogq_messages_stored_total')
+            # || true: grep exits 1 while the counter has no children yet
+            # (before the first batch flush), which must not kill the loop.
+            out=$(curl -fsS http://localhost:8080/metrics | grep '^syslogq_messages_stored_total' || true)
             echo "$out"
             udp=$(echo "$out" | grep 'source="syslog-udp-5140"' | awk '{print ($2+0)}')
             tcp=$(echo "$out" | grep 'source="syslog-tcp-5140"' | awk '{print ($2+0)}')
