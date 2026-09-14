@@ -1,0 +1,48 @@
+# syslogq configuration example. Precedence: defaults < this file < env
+# (SYSLOGQ_ prefix, __ for nesting, e.g. SYSLOGQ_STORAGE__URL).
+#
+# All keys below are optional; the defaults mirror this file minus the TLS
+# source.
+
+api:
+  address: ":8080"          # health/ready/metrics; REST API lands Phase 3
+
+storage:
+  url: http://127.0.0.1:9428  # VictoriaLogs HTTP endpoint
+  timeout: 10s
+  account_id: 0               # VL multi-tenancy account (0 = single tenant)
+
+logging:
+  level: info                 # debug | info | warn | error
+
+ingestion:
+  queue_capacity: 50000
+  queue_policy: drop_newest   # drop_newest | drop_oldest | block
+  workers: 8                  # 0 = auto (min(8, CPU/2))
+  max_message_bytes: 262144   # 256 KiB; larger messages dropped + counted
+  active_connections: 1000    # TCP/TLS concurrent connection limit
+  store_unknown: true         # keep unparseable lines as format=unknown
+  shutdown_drain_timeout: 5s
+  idle_timeout: 120s          # close silent TCP/TLS connections
+  batch:
+    max_entries: 1000
+    max_bytes: 4194304        # 4 MiB
+    flush_interval: 500ms
+  sources:
+    - id: syslog-udp-5140
+      type: syslog_udp
+      enabled: true
+      address: ":5140"
+      parse: [rfc5424, rfc3164]
+    - id: syslog-tcp-5140
+      type: syslog_tcp
+      enabled: true
+      address: ":5140"
+    - id: syslog-tls-6514
+      type: syslog_tls
+      enabled: false
+      address: ":6514"
+      tls:
+        cert_file: /etc/syslogq/tls/cert.pem
+        key_file: /etc/syslogq/tls/key.pem
+        # client_ca_file: /etc/syslogq/tls/client-ca.pem   # enable mTLS

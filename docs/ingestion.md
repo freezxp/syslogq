@@ -1,8 +1,9 @@
 # Ingestion Pipeline
 
-Date: 2026-09-14 · Status: Phase 0 baseline
-Design of the log path from network to storage. Priorities: reliability,
-bounded memory, observability, format extensibility.
+Date: 2026-09-14 · Status: Phase 1 as-built (RFC3164/5424 parsers, RFC6587
+framing, UDP/TCP/TLS listeners, bounded queues, batcher, writer pool; HTTP
+ingest arrives Phase 2). Design of the log path from network to storage.
+Priorities: reliability, bounded memory, observability, format extensibility.
 
 ## 1. Pipeline Stages
 

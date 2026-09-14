@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
+      compose: ${{ steps.filter.outputs.compose }}
       docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v5
@@ -23,6 +24,12 @@ jobs:
             backend:
               - 'backend/**'
               - 'Makefile'
+              - '.github/workflows/ci.yml'
+            compose:
+              - 'backend/**'
+              - 'deploy/**'
+              - 'docker-compose.yml'
+              - 'config/**'
               - '.github/workflows/ci.yml'
             docs:
               - 'docs/**'
@@ -71,6 +78,64 @@ jobs:
           if grep -nE '(master|latest|HEAD)' go.mod; then
             echo "go.mod references a moving ref — pin versions instead"; exit 1
           fi
+
+  compose-smoke:
+    needs: changes
+    if: needs.changes.outputs.compose == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build and start the stack
+        run: docker compose up -d --build
+      - name: Wait for readiness
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/ready; then
+              echo; echo "ready after $((i*2))s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "syslogq never became ready"
+          docker compose ps
+          docker compose logs
+          exit 1
+      - name: Send syslog over UDP and TCP
+        run: |
+          marker="smoke-$(date +%s)"
+          echo "MARKER=$marker" >> "$GITHUB_ENV"
+          logger -n 127.0.0.1 -P 514 --udp "$marker udp compose smoke"
+          logger -n 127.0.0.1 -P 514 --tcp "$marker tcp compose smoke"
+      - name: Verify messages stored (pipeline metrics)
+        run: |
+          for i in $(seq 1 30); do
+            out=$(curl -fsS http://localhost:8080/metrics | grep '^syslogq_messages_stored_total')
+            echo "$out"
+            udp=$(echo "$out" | grep 'source="syslog-udp-5140"' | awk '{print ($2+0)}')
+            tcp=$(echo "$out" | grep 'source="syslog-tcp-5140"' | awk '{print ($2+0)}')
+            if [ "${udp:-0}" -ge 1 ] && [ "${tcp:-0}" -ge 1 ]; then
+              echo "stored: udp=$udp tcp=$tcp"; exit 0
+            fi
+            sleep 1
+          done
+          echo "messages never reported stored"
+          docker compose logs syslogq
+          exit 1
+      - name: Verify messages queryable in VictoriaLogs
+        run: |
+          for i in $(seq 1 30); do
+            hits=$(curl -fsS --get 'http://127.0.0.1:9428/select/logsql/query' \
+                --data-urlencode "query=~\"$MARKER\"" 2>/dev/null | grep -c "$MARKER" || true)
+            if [ "${hits:-0}" -ge 2 ]; then
+              echo "found $hits log entries in VictoriaLogs"; exit 0
+            fi
+            sleep 1
+          done
+          echo "messages never appeared in VictoriaLogs"
+          docker compose logs
+          exit 1
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose logs
 
   docs:
     needs: changes

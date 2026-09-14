@@ -1,0 +1,39 @@
+# syslogq + VictoriaLogs (Phase 1, docs/deployment.md §2).
+#   docker compose up -d
+#
+# Host port 514 (privileged syslog) maps to the container's unprivileged
+# 5140; the server itself runs as a non-root user.
+
+name: syslogq
+
+services:
+  victorialogs:
+    image: victoriametrics/victoria-logs:v1.52.0
+    command:
+      - -storageDataPath=/storage
+      - -httpListenAddr=:9428
+      - -retentionPeriod=30d
+    ports:
+      - "127.0.0.1:9428:9428" # VL query API, loopback only (dev stack)
+    volumes:
+      - vl-data:/storage
+    restart: unless-stopped
+
+  syslogq:
+    build:
+      context: ./backend
+      dockerfile: ../deploy/docker/Dockerfile
+    image: syslogq:dev
+    environment:
+      SYSLOGQ_STORAGE__URL: http://victorialogs:9428
+      SYSLOGQ_LOGGING__LEVEL: info
+    ports:
+      - "8080:8080"   # API /health /ready /metrics
+      - "514:5140/udp" # syslog UDP (host privileged port)
+      - "514:5140/tcp" # syslog TCP
+    depends_on:
+      - victorialogs
+    restart: unless-stopped
+
+volumes:
+  vl-data:

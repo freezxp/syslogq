@@ -1,59 +1,65 @@
 # Deployment & Operations
 
-Date: 2026-09-14 · Status: Phase 0 baseline
+Date: 2026-09-14 · Status: Phase 1 as-built
 Target: one-command bring-up via Docker Compose in Phase 1; single-node
 VictoriaLogs; Kubernetes arrives in Phase 7 (directory prepared only).
 
-## 1. Compose Topology (Phase 1)
+## 1. Compose Topology (Phase 1, as built)
+
+See `docker-compose.yml` at the repo root — the canonical file. Summary:
 
 ```yaml
 services:
-  syslogq:            # Go app: API + UI + syslog listeners
-    image: ghcr.io/freezxp/syslogq:latest        # or build: ./deploy/docker
-    ports: ["8080:8080", "514:514/udp", "514:514/tcp", "6514:6514"]
-    environment: [SYSLOGQ_CONFIG=/etc/syslogq/syslogq.yaml]
-    volumes:
-      - ./config/syslogq.yaml:/etc/syslogq/syslogq.yaml:ro
-      - syslogq-data:/var/lib/syslogq             # SQLite (sessions, audit, saved searches)
+  syslogq:            # Go app: health/ready/metrics + syslog listeners
+    build: {context: ./backend, dockerfile: ../deploy/docker/Dockerfile}
+    environment: [SYSLOGQ_STORAGE__URL=http://victorialogs:9428]
+    ports: ["8080:8080", "514:5140/udp", "514:5140/tcp"]
     depends_on: [victorialogs]
     restart: unless-stopped
   victorialogs:
-    image: victoriametrics/victorialogs:v1.0.0    # PINNED in compose; never :latest
-    command: -storageDataPath=/data -retentionPeriod=30d -httpListenAddr=:9428
-    volumes: [vl-data:/data]
-    ports: ["127.0.0.1:9428:9428"]                # internal; never expose publicly
+    image: victoriametrics/victoria-logs:v1.52.0   # PINNED; never :latest
+    command: -storageDataPath=/storage -retentionPeriod=30d -httpListenAddr=:9428
+    ports: ["127.0.0.1:9428:9428"]                 # dev stack only; never expose publicly
+    volumes: [vl-data:/storage]
     restart: unless-stopped
-volumes: { syslogq-data: {}, vl-data: {} }
 ```
 
-Decisions baked in: VL is **not** exposed publicly (localhost bind) — all
-access flows through syslogq's authenticated API; SQLite lives on a named
-volume so sessions/audit survive restarts; both services have healthchecks
-and `restart: unless-stopped`.
+As-built notes: the server binds unprivileged **5140 in-container** (the
+image runs as a non-root user) and the compose file maps host 514 → 5140;
+config is defaults + `SYSLOGQ_*` env overrides rather than a mounted file in
+the dev stack. TLS source (6514) is defined in `config/syslogq.yaml` but
+disabled by default. When the SQLite-backed features land (Phase 2+), add
+the `syslogq-data` volume and `SYSLOGQ_CONFIG` mount.
+
+VL is bound to localhost on the host: all external access flows through
+syslogq's API; CI runs the full smoke (logger → syslogq → VL query) via
+`make compose-smoke`.
 
 ## 2. Ports & Privileged Ports
 
-Syslog's canonical port 514 is <1024. Inside containers this is irrelevant
-(container userland can bind); the mapping above publishes it on the host
-where the **docker-proxy (root)** does the bind, so no setcap/capabilities
-are needed. Bare-metal (no Docker) alternative documented:
+Syslog's canonical port 514 is <1024. The container listens on unprivileged
+**5140** (required: the image runs as a non-root user) and compose maps host
+514 → 5140, where the **docker-proxy (root)** does the privileged bind, so no
+setcap/capabilities are needed. Bare-metal (no Docker) alternative documented:
 
 ```bash
 setcap 'cap_net_bind_service=+ep' /usr/local/bin/syslogq
-# or an systemd socket / iptables REDIRECT 514→1514 with listeners on :1514
+# or a systemd socket / iptables REDIRECT 514→5140 with listeners on :5140
 ```
 
-Port map: 8080 HTTP API+UI · 514/udp+tcp syslog · 6514 syslog TLS ·
+Port map: 8080 HTTP API+UI · 514→5140/udp+tcp syslog · 6514 syslog TLS ·
 9428 VictoriaLogs (internal only) · `/metrics` on 8080 (bind-scoped, §
 `security.md` §9).
 
-## 3. Images & Build
+## 3. Images & Build (as built)
 
-- `deploy/docker/Dockerfile` (backend): multi-stage — `golang:1.25` build
-  (vendor or module-cache mounts, `CGO_ENABLED=0`), distroless/static
-  runtime, `USER 10001`, pinned digests, no shell.
-- `deploy/docker/Dockerfile.frontend` → built artifacts embedded into the Go
-  binary via `go:embed` (ADR-0006): one serving artifact, no nginx layer.
+- `deploy/docker/Dockerfile` (context `backend/`): multi-stage —
+  `golang:1.25-alpine` build (`CGO_ENABLED=0`, `-trimpath`), then
+  distroless/static `nonroot` runtime (uid 65532), no shell, one
+  `/syslogq` binary.
+- `deploy/docker/Dockerfile.frontend` (Phase 4+) → built artifacts embedded
+  into the Go binary via `go:embed` (ADR-0006): one serving artifact, no
+  nginx layer.
 - Images tagged `vX.Y.Z` + git SHA; CI builds and pushes on tag; compose
   pins versions, never `latest` for VL.
 - Update policy: VL upgrades go through the migration-trigger checklist
@@ -63,9 +69,8 @@ Port map: 8080 HTTP API+UI · 514/udp+tcp syslog · 6514 syslog TLS ·
 ## 4. Configuration
 
 - File at `/etc/syslogq/syslogq.yaml` (path overridable via `SYSLOGQ_CONFIG`
-  or `-config` flag). Precedence: defaults < YAML < env (`SYSLOGQ_*`, `.`→`_`)
-  < flags. Full schema in `config.example.yaml` (tracked; generated docs in
-  Phase 1).
+  or `-config` flag). Precedence: defaults < YAML < env (`SYSLOGQ_*`,
+  `__` for nesting). Full schema in `config/syslogq.yaml` (tracked example).
 - Secrets only via env/file (`security.md` §7): `SYSLOGQ_ADMIN_PASSWORD`
   (first boot), TLS key/cert **paths** not values.
 - Untracked `.env` + tracked `.env.example` for compose; `.gitignore` covers

@@ -1,10 +1,10 @@
 # Implementation Roadmap
 
-Date: 2026-09-14 · Status: Phase 0 deliverables complete (docs, ADRs, repo
-skeleton, Makefile, CI) — pending review/approval to proceed. Each phase has
-explicit exit criteria; a phase is not "done" until its walkthrough + gates
-pass (see `requirements.md` §8). No performance number is claimed before it is
-measured (Phase 6 methodology).
+Date: 2026-09-14 · Status: Phase 1 deliverables complete (core ingestion
+verified end-to-end: `logger` → syslogq → VictoriaLogs; unit tests green;
+compose smoke in CI). Each phase has explicit exit criteria; a phase is not
+"done" until its walkthrough + gates pass (see `requirements.md` §8). No
+performance number is claimed before it is measured (Phase 6 methodology).
 
 ## Phase 0 — Architecture
 **Deliverables:** `docs/`: architecture, requirements, storage-comparison,
@@ -13,7 +13,7 @@ roadmap + `decisions/` ADRs 0001–0006. Repo skeleton with module layout,
 Makefile, CI.
 **Exit:** documents reviewed; approval to proceed.
 
-## Phase 1 — Core Ingestion
+## Phase 1 — Core Ingestion — COMPLETE (2026-09-14)
 Backend skeleton; `model.LogEntry`; RFC3164 + RFC5424 parsers (+ RFC6587
 framing for TCP); UDP/TCP syslog listeners; normalization; VictoriaLogs
 adapter (write path); batcher with bounded queues; config (YAML/env/flags);

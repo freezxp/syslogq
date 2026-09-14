@@ -214,7 +214,7 @@ syslogq/
 | SPA delivery | Frontend embedded in the Go binary (`go:embed`), same-origin | 0006 |
 | Syslog parsing | Hand-written parsers (no cgo dep), RFC3164+5424+6587 | — |
 | Config | koanf (YAML+env+flags) | — |
-| HTTP | stdlib `net/http` + chi router; slog; prometheus client | — |
+| HTTP | stdlib `net/http` (Phase 1: health/ready/metrics); chi evaluated at Phase 3 REST build-out; slog; prometheus client | — |
 
 ## 10. Explicit Non-Goals (Phase 1)
 
