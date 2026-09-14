@@ -30,6 +30,7 @@ type Parsed struct {
 	MessageID string
 	Facility  *int
 	Severity  *int
+	Priority  *int
 	Message   string
 	Fields    map[string]string
 	Raw       []byte

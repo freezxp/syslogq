@@ -12,6 +12,7 @@ const (
 	TypeSyslogUDP = "syslog_udp"
 	TypeSyslogTCP = "syslog_tcp"
 	TypeSyslogTLS = "syslog_tls"
+	TypeHTTPJSON  = "http_json"
 )
 
 // Queue policies (docs/ingestion.md §1).
@@ -25,6 +26,7 @@ const (
 const (
 	ParseRFC5424 = "rfc5424"
 	ParseRFC3164 = "rfc3164"
+	ParseJSON    = "json"
 )
 
 type Config struct {
@@ -32,6 +34,17 @@ type Config struct {
 	Storage   StorageConfig   `koanf:"storage"`
 	Ingestion IngestionConfig `koanf:"ingestion"`
 	Logging   LoggingConfig   `koanf:"logging"`
+	Auth      AuthConfig      `koanf:"auth"`
+}
+
+type AuthConfig struct {
+	// DBPath is the SQLite database file (users, sessions, audit).
+	DBPath string `koanf:"db_path"`
+	// SessionTTL is how long a login token stays valid.
+	SessionTTL time.Duration `koanf:"session_ttl"`
+	// AdminPasswordFile, when set, holds the first-boot admin password.
+	// Prefer SYSLOGQ_AUTH__ADMIN_PASSWORD env (never store in YAML).
+	AdminPasswordFile string `koanf:"admin_password_file"`
 }
 
 type APIConfig struct {
@@ -65,6 +78,18 @@ type IngestionConfig struct {
 	IdleTimeout time.Duration  `koanf:"idle_timeout"`
 	Batch       BatchConfig    `koanf:"batch"`
 	Sources     []SourceConfig `koanf:"sources"`
+	// HTTP configures POST /api/v1/ingest.
+	HTTP HTTPIngestConfig `koanf:"http"`
+}
+
+// HTTPIngestConfig bounds the HTTP ingest endpoint.
+type HTTPIngestConfig struct {
+	// RequireAuth demands a valid session for POST /api/v1/ingest.
+	// Default false for syslog-forwarder ergonomics (docs/ingestion.md §6);
+	// enable in production.
+	RequireAuth bool `koanf:"require_auth"`
+	// Enabled turns the endpoint on (default true).
+	Enabled bool `koanf:"enabled"`
 }
 
 type BatchConfig struct {
@@ -169,12 +194,12 @@ func (c *Config) validate() error {
 		}
 		seen[s.ID] = true
 		switch s.Type {
-		case TypeSyslogUDP, TypeSyslogTCP, TypeSyslogTLS:
+		case TypeSyslogUDP, TypeSyslogTCP, TypeSyslogTLS, TypeHTTPJSON:
 		default:
-			problems = append(problems, prefix+fmt.Sprintf(".type: must be %s|%s|%s (got %q)",
-				TypeSyslogUDP, TypeSyslogTCP, TypeSyslogTLS, s.Type))
+			problems = append(problems, prefix+fmt.Sprintf(".type: must be %s|%s|%s|%s (got %q)",
+				TypeSyslogUDP, TypeSyslogTCP, TypeSyslogTLS, TypeHTTPJSON, s.Type))
 		}
-		if s.Address == "" {
+		if s.Address == "" && s.Type != TypeHTTPJSON {
 			problems = append(problems, prefix+".address: required")
 		}
 		if s.QueuePolicy != "" {
@@ -186,7 +211,7 @@ func (c *Config) validate() error {
 			problems = append(problems, prefix+".parse: at least one format required")
 		}
 		for _, f := range s.Parse {
-			if f != ParseRFC5424 && f != ParseRFC3164 {
+			if f != ParseRFC5424 && f != ParseRFC3164 && f != ParseJSON {
 				problems = append(problems, prefix+fmt.Sprintf(".parse: unknown format %q", f))
 			}
 		}

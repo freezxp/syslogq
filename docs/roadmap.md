@@ -22,14 +22,14 @@ Prometheus metrics; `/health` `/ready`; structured logging; `docker-compose.yml`
 **Exit:** `logger -n 127.0.0.1 -P 514 --udp "test"` lands in VictoriaLogs and is
 readable via VL API; soak 1K logs/sec for 10 min without queue growth; `go test ./...` green.
 
-## Phase 2 — HTTP/JSON Ingestion + Auth
+## Phase 2 — HTTP/JSON Ingestion + Auth — COMPLETE (2026-09-14)
 `POST /api/v1/ingest` (single/array/NDJSON, batch limits); HTTP listener
 config; JSON parser; auth (login/logout/me, bcrypt, sessions, RBAC middleware);
 audit log table; TLS for HTTP API (cert config); rate limiting on ingest.
 **Exit:** ingest via curl with token auth; unauthorized requests rejected; parser
 metrics per format visible on `/metrics`.
 
-## Phase 3 — Query API
+## Phase 3 — Query API — COMPLETE (2026-09-14)
 `query.Expr` AST + LogsQL compiler (central escaping); search endpoint with
 time range + cursor pagination; field names/values/facets endpoints; stats +
 hits endpoints; export endpoints (JSON/CSV/NDJSON streaming); query limits

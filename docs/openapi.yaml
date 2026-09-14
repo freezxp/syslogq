@@ -1,0 +1,527 @@
+openapi: 3.1.0
+info:
+  title: syslogq API
+  version: 1.0.0
+  description: |
+    Web-based syslog server & log analytics. REST API under /api/v1;
+    health endpoints are unauthenticated. All examples assume
+    `Authorization: Bearer <token>` from POST /api/v1/auth/login.
+servers:
+  - url: /
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness (process up)
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+  /ready:
+    get:
+      operationId: getReady
+      summary: Readiness (storage ping, listeners, queue saturation)
+      security: []
+      responses:
+        "200":
+          description: All components ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyStatus"
+        "503":
+          description: One or more components failing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyStatus"
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Prometheus metrics
+      security: []
+      responses:
+        "200":
+          description: Prometheus text exposition
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Exchange credentials for a session token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Invalidate the current session
+      responses:
+        "200":
+          description: Session deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOK"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/me:
+    get:
+      operationId: getMe
+      summary: Current session's user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/system/info:
+    get:
+      operationId: getSystemInfo
+      summary: Build/system information
+      responses:
+        "200":
+          description: System info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/ingest:
+    post:
+      operationId: ingest
+      summary: Ingest JSON log entries (single object, array, or NDJSON)
+      description: |
+        Routes entries through the same pipeline as syslog listeners.
+        Body ≤ 8 MiB and ≤ 1000 entries; entries are NDJSON lines unless a
+        JSON array. May require a session depending on
+        `ingestion.http.require_auth`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/LogInput"
+                - type: array
+                  items:
+                    $ref: "#/components/schemas/LogInput"
+          application/x-ndjson:
+            schema:
+              type: string
+              description: One JSON object per line
+      responses:
+        "200":
+          description: Per-entry acceptance summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/logs/search:
+    get:
+      operationId: searchLogs
+      summary: Search logs (newest first)
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/Start"
+        - $ref: "#/components/parameters/End"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+            maximum: 100000
+      responses:
+        "200":
+          description: Matching rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [logs]
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LogRow"
+                  next_offset:
+                    type: integer
+                    description: Present when a full page was returned
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/StorageUnavailable"
+  /api/v1/logs/count:
+    get:
+      operationId: countLogs
+      summary: Count matching logs
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/Start"
+        - $ref: "#/components/parameters/End"
+      responses:
+        "200":
+          description: Total matched
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count:
+                    type: integer
+                    format: int64
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/logs/volume:
+    get:
+      operationId: logVolume
+      summary: Time-bucketed counts (zero-filled, epoch-aligned)
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/Start"
+        - $ref: "#/components/parameters/End"
+        - name: bucket
+          in: query
+          description: Bucket width (Go duration or Nd). Default 5m; ≤ 2000 buckets per request.
+          schema:
+            type: string
+            default: 5m
+            examples: ["5m", "1h", "1d"]
+      responses:
+        "200":
+          description: Contiguous bucket series
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bucket, buckets]
+                properties:
+                  bucket:
+                    type: string
+                  buckets:
+                    type: array
+                    items:
+                      type: object
+                      required: [time, count]
+                      properties:
+                        time:
+                          type: string
+                          format: date-time
+                        count:
+                          type: integer
+                          format: int64
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/logs/export:
+    get:
+      operationId: exportLogs
+      summary: Download matching logs
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/Start"
+        - $ref: "#/components/parameters/End"
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [ndjson, json, csv]
+            default: ndjson
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10000
+            maximum: 10000
+      responses:
+        "200":
+          description: File download (CSV columns follow the first row's keys)
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: string
+            text/csv:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/fields:
+    get:
+      operationId: listFields
+      summary: Field names present in the range
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/Start"
+        - $ref: "#/components/parameters/End"
+      responses:
+        "200":
+          description: Fields with row counts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fields]
+                properties:
+                  fields:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ValueCount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/fields/{field}/values:
+    get:
+      operationId: fieldValues
+      summary: Top values of a field (facet counts)
+      parameters:
+        - name: field
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9_.]+$"
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/Start"
+        - $ref: "#/components/parameters/End"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Values with match counts (empty value = rows missing the field)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [field, values]
+                properties:
+                  field:
+                    type: string
+                  values:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ValueCount"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    Query:
+      name: q
+      in: query
+      description: |
+        Filter expression (Advanced mode subset): phrases, `field:value`,
+        `field:!=value`, `field:~"regex"`, `field:>n`, `field:>=n`,
+        `field:<n`, `field:<=n`, `field:*`, with AND/OR/NOT and parentheses.
+        Values needing quotes are double-quoted with \" and \\ escapes.
+        Server-side recompilation guarantees escaping; ≤ 8 KiB.
+      schema:
+        type: string
+        maxLength: 8192
+    Start:
+      name: start
+      in: query
+      description: Range start (RFC3339). Defaults to end − 1h.
+      schema:
+        type: string
+        format: date-time
+    End:
+      name: end
+      in: query
+      description: Range end (RFC3339). Defaults to now.
+      schema:
+        type: string
+        format: date-time
+  responses:
+    BadRequest:
+      description: Invalid query or parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing/invalid session
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    StorageUnavailable:
+      description: Storage backend failing or timed out
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    StatusOK:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    LoginResponse:
+      type: object
+      required: [token, expires_at, user]
+      properties:
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          type: object
+          required: [username, role]
+          properties:
+            username:
+              type: string
+            role:
+              type: string
+              enum: [admin, operator, viewer]
+    Me:
+      type: object
+      required: [username, role, expires_at]
+      properties:
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator, viewer]
+        expires_at:
+          type: string
+          format: date-time
+    ReadyStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+    IngestResponse:
+      type: object
+      required: [accepted, rejected]
+      properties:
+        accepted:
+          type: integer
+        rejected:
+          type: object
+          additionalProperties:
+            type: integer
+    LogInput:
+      type: object
+      description: |
+        One log entry. Recognized keys: timestamp|time|@timestamp,
+        host|hostname, level|severity|severity_name|level_name,
+        facility, message|msg|short_message, service|app|app_name,
+        process_id|procid. Other keys become dynamic fields.
+      properties:
+        message:
+          type: string
+        timestamp:
+          type: string
+        host:
+          type: string
+        severity:
+          type:
+            - integer
+            - string
+    LogRow:
+      type: object
+      description: One stored log line (field → string). _time and _msg are always present; other fields depend on the source format.
+      additionalProperties:
+        type: string
+    ValueCount:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+          format: int64
+security:
+  - bearerAuth: []

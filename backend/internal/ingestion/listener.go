@@ -26,7 +26,8 @@ type Listener interface {
 }
 
 // NewListener builds the listener for a source config, opening the socket
-// eagerly so bind errors surface at startup, before Run.
+// eagerly so bind errors surface at startup, before Run. http_json sources
+// have no socket and return nil.
 func NewListener(cfg config.SourceConfig, pipe *Pipeline, m *metrics.Ingestion, log *slog.Logger) (Listener, error) {
 	switch cfg.Type {
 	case config.TypeSyslogUDP:
@@ -39,6 +40,8 @@ func NewListener(cfg config.SourceConfig, pipe *Pipeline, m *metrics.Ingestion, 
 			return nil, fmt.Errorf("source %s: %w", cfg.ID, err)
 		}
 		return newTCPListener(cfg, pipe, m, log, tlsCfg)
+	case config.TypeHTTPJSON:
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("source %s: unknown type %q", cfg.ID, cfg.Type)
 	}

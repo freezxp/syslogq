@@ -1,6 +1,6 @@
 // Command syslogq is the syslogq server: syslog listeners, ingestion
-// pipeline, and the HTTP surface (health, readiness, metrics). The REST API
-// and web UI land in later phases per docs/roadmap.md.
+// pipeline, HTTP API (auth, ingest, health/readiness/metrics), and the
+// embedded web UI.
 package main
 
 import (
@@ -10,9 +10,11 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/freezxp/syslogq/internal/api"
+	"github.com/freezxp/syslogq/internal/auth"
 	"github.com/freezxp/syslogq/internal/config"
 	"github.com/freezxp/syslogq/internal/health"
 	"github.com/freezxp/syslogq/internal/ingestion"
@@ -49,6 +51,7 @@ func run() int {
 
 	logger := newLogger(cfg.Logging.Level)
 	slog.SetDefault(logger)
+	api.Version = version
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -64,6 +67,20 @@ func run() int {
 		logger.Error("storage client", "error", err)
 		return 1
 	}
+
+	// Auth store. The SQLite directory may not exist yet (first boot).
+	if dir := filepath.Dir(cfg.Auth.DBPath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			logger.Error("auth db directory", "error", err)
+			return 1
+		}
+	}
+	authSvc, err := auth.New(cfg.Auth.DBPath, adminBootstrapPassword(), cfg.Auth.SessionTTL)
+	if err != nil {
+		logger.Error("auth store", "error", err)
+		return 1
+	}
+	defer authSvc.Close()
 
 	reg := prometheus.NewRegistry()
 	ing := metrics.NewIngestion(reg)
@@ -84,6 +101,9 @@ func run() int {
 			pipe.Stop()
 			return 1
 		}
+		if l == nil { // http_json: no socket
+			continue
+		}
 		mgr.Add(src.ID, l)
 	}
 	mgr.Start()
@@ -94,16 +114,25 @@ func run() int {
 			return mgr.DownError()
 		}),
 		health.NewChecker("queue", func(_ context.Context) error {
-			if pipe.Saturation() >= 0.9 {
-				return fmt.Errorf("queue saturation %.0f%%", pipe.Saturation()*100)
+			if sat := pipe.Saturation(); sat >= 0.9 {
+				return fmt.Errorf("queue saturation %.0f%%", sat*100)
 			}
 			return nil
 		}),
 	)
 
-	srv := api.NewServer(api.Config{Address: cfg.API.Address}, reg, ready, logger)
+	apiServer := api.NewServer(api.Config{Address: cfg.API.Address}, api.Deps{
+		MetricsReg:        reg,
+		Ingestion:         ing,
+		Ready:             ready,
+		Auth:              authSvc,
+		Log:               logger,
+		IngestFunc:        func(raw []byte) bool { return pipe.IngestRaw("http-ingest", raw, "") },
+		IngestRequireAuth: cfg.Ingestion.HTTP.RequireAuth,
+		Reader:            store,
+	})
 	httpErr := make(chan error, 1)
-	go func() { httpErr <- srv.Start() }()
+	go func() { httpErr <- apiServer.Start() }()
 
 	logger.Info("started",
 		"api", cfg.API.Address,
@@ -121,9 +150,18 @@ func run() int {
 	// pipeline, then stop HTTP.
 	mgr.Close()
 	pipe.Stop()
-	srv.Stop()
+	apiServer.Stop()
 	logger.Info("shutdown complete")
 	return 0
+}
+
+// adminBootstrapPassword returns the first-boot admin password: env var
+// first (secrets never live in YAML), then an operator-supplied file.
+func adminBootstrapPassword() string {
+	if p := os.Getenv("SYSLOGQ_ADMIN_PASSWORD"); p != "" {
+		return p
+	}
+	return ""
 }
 
 func newLogger(level string) *slog.Logger {

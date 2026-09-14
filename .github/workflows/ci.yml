@@ -171,3 +171,5 @@ jobs:
             fi
           done
           exit $missing
+      - name: validate OpenAPI document
+        run: npx -y @apidevtools/swagger-cli@4 validate docs/openapi.yaml

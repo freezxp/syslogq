@@ -1,10 +1,17 @@
 package parser
 
 // Detect sniffs the wire format of a raw payload (docs/ingestion.md §2):
-// RFC5424 ("<PRI>VERSION SP") → RFC3164 ("<PRI>" without a version) → unknown.
-// Detection is cheap and never panics; it cannot fail.
+// RFC5424 ("<PRI>VERSION SP") → RFC3164 ("<PRI>" without a version) → JSON
+// (leading '{') → unknown. Detection is cheap and never panics; it cannot
+// fail.
 func Detect(raw []byte) string {
-	if len(raw) == 0 || raw[0] != '<' {
+	if len(raw) == 0 {
+		return FormatUnknown
+	}
+	if raw[0] == '{' {
+		return FormatJSON
+	}
+	if raw[0] != '<' {
 		return FormatUnknown
 	}
 	i := 1

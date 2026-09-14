@@ -38,7 +38,7 @@ func TestLoadDefaults(t *testing.T) {
 		cfg.Ingestion.Batch.FlushInterval != 500*time.Millisecond {
 		t.Errorf("batch: %+v", cfg.Ingestion.Batch)
 	}
-	if len(cfg.Ingestion.Sources) != 2 {
+	if len(cfg.Ingestion.Sources) != 3 {
 		t.Fatalf("default sources: %d", len(cfg.Ingestion.Sources))
 	}
 	udp := cfg.Ingestion.Sources[0]
@@ -48,8 +48,18 @@ func TestLoadDefaults(t *testing.T) {
 	if len(udp.Parse) != 2 || udp.Parse[0] != ParseRFC5424 {
 		t.Errorf("udp parse default: %v", udp.Parse)
 	}
-	if len(cfg.EnabledSources()) != 2 {
-		t.Errorf("both default sources should be enabled")
+	httpSrc := cfg.Ingestion.Sources[2]
+	if httpSrc.ID != "http-ingest" || httpSrc.Type != TypeHTTPJSON || httpSrc.Address != "" {
+		t.Errorf("http source: %+v", httpSrc)
+	}
+	if !cfg.Ingestion.HTTP.Enabled || cfg.Ingestion.HTTP.RequireAuth {
+		t.Errorf("http ingest defaults: %+v", cfg.Ingestion.HTTP)
+	}
+	if cfg.Auth.DBPath == "" || cfg.Auth.SessionTTL != 24*time.Hour {
+		t.Errorf("auth defaults: %+v", cfg.Auth)
+	}
+	if len(cfg.EnabledSources()) != 3 {
+		t.Errorf("all default sources should be enabled")
 	}
 }
 

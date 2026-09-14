@@ -148,6 +148,21 @@ func (p *Pipeline) Stop() {
 	p.hardCancel()
 }
 
+// IngestRaw is the HTTP-ingest entry point: it validates that raw is a JSON
+// object (the only HTTP body shape), then feeds it through the standard
+// path. Returns false for non-JSON payloads (counted as rejected).
+func (p *Pipeline) IngestRaw(srcID string, raw []byte, remoteIP string) bool {
+	if _, ok := p.sources[srcID]; !ok {
+		return false
+	}
+	if len(raw) == 0 || raw[0] != '{' {
+		p.m.ParseErrors.WithLabelValues(srcID, parser.FormatJSON).Inc()
+		return false
+	}
+	p.Ingest(srcID, raw, remoteIP, 0)
+	return true
+}
+
 // Ingest is the listeners' entry point: detect, parse, normalize, enqueue.
 // Safe for concurrent use.
 func (p *Pipeline) Ingest(srcID string, raw []byte, remoteIP string, remotePort int) {

@@ -32,7 +32,8 @@ func TestDetect(t *testing.T) {
 		{"<0>", FormatRFC3164},
 		{"13 no pri", FormatUnknown},
 		{"<abc>1 x", FormatUnknown},
-		{"{\"json\":true}", FormatUnknown},
+		{"{\"json\":true}", FormatJSON},
+		{"[1,2]", FormatUnknown},
 		{"", FormatUnknown},
 		// Oversized PRI + version: sniffs 5424, fails PRI validation there,
 		// and is stored as format "unknown" via the parse-error path.

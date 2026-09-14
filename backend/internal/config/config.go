@@ -117,6 +117,14 @@ func defaults() map[string]any {
 				"id": "syslog-tcp-5140", "type": TypeSyslogTCP, "enabled": true,
 				"address": ":5140",
 			},
+			map[string]any{
+				"id": "http-ingest", "type": TypeHTTPJSON, "enabled": true,
+				"parse": []any{ParseJSON},
+			},
 		},
+		"ingestion.http.enabled":      true,
+		"ingestion.http.require_auth": false,
+		"auth.db_path":                "/var/lib/syslogq/syslogq.db",
+		"auth.session_ttl":            "24h",
 	}
 }
