@@ -8,7 +8,9 @@ WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+# vite.config writes into ../backend for go:embed; inside this isolated
+# stage keep the output local so the handoff COPY below stays stable.
+RUN npm run build -- --outDir dist
 # Hand off to the Go build below.
 FROM golang:1.27-alpine AS build
 WORKDIR /src
