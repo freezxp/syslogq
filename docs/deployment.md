@@ -55,7 +55,7 @@ Port map: 8080 HTTP API+UI · 514→5140/udp+tcp syslog · 6514 syslog TLS ·
 
 - `deploy/docker/Dockerfile` (context: repo root): three stages —
   `node:24-alpine` builds the SPA (`npm ci && npm run build`), then
-  `golang:1.25-alpine` builds the Go binary (`CGO_ENABLED=0`, `-trimpath`)
+  `golang:1.27-alpine` builds the Go binary (`CGO_ENABLED=0`, `-trimpath`)
   with the SPA `go:embed`ded from the node stage output (ADR-0006), then
   distroless/static `nonroot` runtime (uid 65532), no shell, one
   `/syslogq` binary serving API + UI on 8080.
